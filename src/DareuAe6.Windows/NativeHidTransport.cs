@@ -146,7 +146,7 @@ public sealed class NativeHidTransport : IBatteryTransport
                         continue;
                     }
 
-                    var pathPointer = IntPtr.Add(detail, IntPtr.Size == 8 ? 8 : 4);
+                    var pathPointer = IntPtr.Add(detail, 4);
                     var path = Marshal.PtrToStringUni(pathPointer);
                     if (path is not null)
                     {
