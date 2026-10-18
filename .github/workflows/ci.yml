@@ -1,0 +1,26 @@
+name: build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Restore
+        run: dotnet restore .\DareuAe6Battery.sln
+      - name: Build
+        run: dotnet build .\DareuAe6Battery.sln -c Release --no-restore
+      - name: Test
+        run: dotnet test .\DareuAe6Battery.sln -c Release --no-build --verbosity normal
+      - name: Publish tray app
+        run: dotnet publish .\src\DareuAe6.Tray\DareuAe6.Tray.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false --no-restore -o .\publish
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DareuAe6Battery-win-x64
+          path: publish/
