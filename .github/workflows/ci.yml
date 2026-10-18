@@ -13,7 +13,7 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - name: Restore
-        run: dotnet restore .\DareuAe6Battery.sln
+        run: dotnet restore .\DareuAe6Battery.sln -r win-x64
       - name: Build
         run: dotnet build .\DareuAe6Battery.sln -c Release --no-restore
       - name: Test
