@@ -31,14 +31,15 @@ public sealed class NativeHidTransport : IBatteryTransport
 
     private static IEnumerable<string> EnumerateCandidatePaths()
     {
-        var deviceInfoSet = NativeMethods.SetupDiGetClassDevs(ref HidGuid, IntPtr.Zero, IntPtr.Zero, NativeMethods.DigcfPresent | NativeMethods.DigcfDeviceInterface);
+        var hidGuid = HidGuid;
+        var deviceInfoSet = NativeMethods.SetupDiGetClassDevs(ref hidGuid, IntPtr.Zero, IntPtr.Zero, NativeMethods.DigcfPresent | NativeMethods.DigcfDeviceInterface);
         if (deviceInfoSet == new IntPtr(-1)) yield break;
         try
         {
             for (uint index = 0; ; index++)
             {
                 var interfaceData = new NativeMethods.SpDeviceInterfaceData { CbSize = Marshal.SizeOf<NativeMethods.SpDeviceInterfaceData>() };
-                if (!NativeMethods.SetupDiEnumDeviceInterfaces(deviceInfoSet, IntPtr.Zero, ref HidGuid, index, ref interfaceData)) yield break;
+                if (!NativeMethods.SetupDiEnumDeviceInterfaces(deviceInfoSet, IntPtr.Zero, ref hidGuid, index, ref interfaceData)) yield break;
                 NativeMethods.SetupDiGetDeviceInterfaceDetail(deviceInfoSet, ref interfaceData, IntPtr.Zero, 0, out var requiredSize, IntPtr.Zero);
                 if (requiredSize <= 0) continue;
                 var detail = Marshal.AllocHGlobal(requiredSize);
