@@ -24,18 +24,10 @@ public sealed class NativeHidTransport : IBatteryTransport
         {
             candidateFound = true;
             cancellationToken.ThrowIfCancellationRequested();
-            using var device = NativeMethods.CreateFile(
-                path,
-                NativeMethods.GenericRead | NativeMethods.GenericWrite,
-                NativeMethods.FileShareRead | NativeMethods.FileShareWrite,
-                IntPtr.Zero,
-                NativeMethods.OpenExisting,
-                0,
-                IntPtr.Zero);
-
+            using var device = OpenDevice(path, out var openFailure);
             if (device.IsInvalid)
             {
-                lastFailure = $"open failed (Win32 {Marshal.GetLastWin32Error()})";
+                lastFailure = openFailure;
                 continue;
             }
 
@@ -167,6 +159,40 @@ public sealed class NativeHidTransport : IBatteryTransport
 
     private static bool IsDareuCollection(string path) =>
         path.Contains($"vid_{ProtocolLayout.VendorId:X4}", StringComparison.OrdinalIgnoreCase);
+
+    private static SafeFileHandle OpenDevice(string path, out string failure)
+    {
+        var attempts = new[]
+        {
+            NativeMethods.GenericRead | NativeMethods.GenericWrite,
+            NativeMethods.GenericWrite,
+            NativeMethods.GenericRead,
+            0u
+        };
+        var lastError = 0;
+        foreach (var desiredAccess in attempts)
+        {
+            var device = NativeMethods.CreateFile(
+                path,
+                desiredAccess,
+                NativeMethods.FileShareRead | NativeMethods.FileShareWrite,
+                IntPtr.Zero,
+                NativeMethods.OpenExisting,
+                0,
+                IntPtr.Zero);
+            if (!device.IsInvalid)
+            {
+                failure = string.Empty;
+                return device;
+            }
+
+            lastError = Marshal.GetLastWin32Error();
+            device.Dispose();
+        }
+
+        failure = $"open failed (Win32 {lastError})";
+        return new SafeFileHandle(new IntPtr(-1), ownsHandle: true);
+    }
 
     private static bool TryGetCapabilities(
         SafeFileHandle device,
