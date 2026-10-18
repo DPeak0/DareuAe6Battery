@@ -148,7 +148,7 @@ public sealed class NativeHidTransport : IBatteryTransport
 
                     var pathPointer = IntPtr.Add(detail, IntPtr.Size == 8 ? 8 : 4);
                     var path = Marshal.PtrToStringUni(pathPointer);
-                    if (path is not null && IsMatchingCollection(path))
+                    if (path is not null && IsDareuCollection(path))
                     {
                         yield return path;
                     }
@@ -165,9 +165,8 @@ public sealed class NativeHidTransport : IBatteryTransport
         }
     }
 
-    private static bool IsMatchingCollection(string path) =>
-        path.Contains($"vid_{ProtocolLayout.VendorId:X4}", StringComparison.OrdinalIgnoreCase) &&
-        path.Contains($"pid_{ProtocolLayout.ProductId:X4}", StringComparison.OrdinalIgnoreCase);
+    private static bool IsDareuCollection(string path) =>
+        path.Contains($"vid_{ProtocolLayout.VendorId:X4}", StringComparison.OrdinalIgnoreCase);
 
     private static bool TryGetCapabilities(
         SafeFileHandle device,
