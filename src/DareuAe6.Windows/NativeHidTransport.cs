@@ -24,14 +24,14 @@ public sealed class NativeHidTransport : IBatteryTransport
         {
             candidateFound = true;
             cancellationToken.ThrowIfCancellationRequested();
-            using var device = OpenDevice(path, out var openFailure);
-            if (device.IsInvalid)
+            using var probe = OpenDevice(path, out var openFailure, out var probeAccess);
+            if (probe.IsInvalid)
             {
                 lastFailure = openFailure;
                 continue;
             }
 
-            if (!TryGetCapabilities(device, out var capabilities, out var capabilityFailure))
+            if (!TryGetCapabilities(probe, out var capabilities, out var capabilityFailure))
             {
                 lastFailure = capabilityFailure;
                 continue;
@@ -50,27 +50,56 @@ public sealed class NativeHidTransport : IBatteryTransport
                 continue;
             }
 
-            var report = BatteryProtocol.CreateQuery(_targetId).CreateReport();
-            if (!NativeMethods.HidD_SetFeature(device, report, report.Length))
+            SafeFileHandle device = probe;
+            if (probeAccess != (NativeMethods.GenericRead | NativeMethods.GenericWrite))
             {
-                lastFailure = $"SetFeature failed (Win32 {Marshal.GetLastWin32Error()})";
-                continue;
+                device = NativeMethods.CreateFile(
+                    path,
+                    NativeMethods.GenericRead | NativeMethods.GenericWrite,
+                    NativeMethods.FileShareRead | NativeMethods.FileShareWrite,
+                    IntPtr.Zero,
+                    NativeMethods.OpenExisting,
+                    0,
+                    IntPtr.Zero);
+                if (device.IsInvalid)
+                {
+                    lastFailure = $"target HID collection requires read/write access (Win32 {Marshal.GetLastWin32Error()})";
+                    device.Dispose();
+                    continue;
+                }
             }
 
-            var response = new byte[capabilities.FeatureReportByteLength];
-            response[0] = report[0];
-            if (!NativeMethods.HidD_GetFeature(device, response, response.Length))
+            try
             {
-                lastFailure = $"GetFeature failed (Win32 {Marshal.GetLastWin32Error()})";
-                continue;
-            }
+                var report = BatteryProtocol.CreateQuery(_targetId).CreateReport();
+                if (!NativeMethods.HidD_SetFeature(device, report, report.Length))
+                {
+                    lastFailure = $"SetFeature failed (Win32 {Marshal.GetLastWin32Error()})";
+                    continue;
+                }
 
-            if (BatteryProtocol.TryParse(response, _targetId, out var reading))
+                var response = new byte[capabilities.FeatureReportByteLength];
+                response[0] = report[0];
+                if (!NativeMethods.HidD_GetFeature(device, response, response.Length))
+                {
+                    lastFailure = $"GetFeature failed (Win32 {Marshal.GetLastWin32Error()})";
+                    continue;
+                }
+
+                if (BatteryProtocol.TryParse(response, _targetId, out var reading))
+                {
+                    return ValueTask.FromResult<BatteryReading?>(reading);
+                }
+
+                lastFailure = "feature report validation failed";
+            }
+            finally
             {
-                return ValueTask.FromResult<BatteryReading?>(reading);
+                if (!ReferenceEquals(device, probe))
+                {
+                    device.Dispose();
+                }
             }
-
-            lastFailure = "feature report validation failed";
         }
 
         throw new InvalidOperationException(
@@ -160,7 +189,10 @@ public sealed class NativeHidTransport : IBatteryTransport
     private static bool IsDareuCollection(string path) =>
         path.Contains($"vid_{ProtocolLayout.VendorId:X4}", StringComparison.OrdinalIgnoreCase);
 
-    private static SafeFileHandle OpenDevice(string path, out string failure)
+    private static SafeFileHandle OpenDevice(
+        string path,
+        out string failure,
+        out uint access)
     {
         var attempts = new[]
         {
@@ -170,6 +202,7 @@ public sealed class NativeHidTransport : IBatteryTransport
             0u
         };
         var lastError = 0;
+        access = 0;
         foreach (var desiredAccess in attempts)
         {
             var device = NativeMethods.CreateFile(
@@ -182,6 +215,7 @@ public sealed class NativeHidTransport : IBatteryTransport
                 IntPtr.Zero);
             if (!device.IsInvalid)
             {
+                access = desiredAccess;
                 failure = string.Empty;
                 return device;
             }
