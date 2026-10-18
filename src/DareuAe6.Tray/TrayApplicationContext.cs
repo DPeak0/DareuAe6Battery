@@ -25,33 +25,71 @@ internal sealed class TrayApplicationContext : ApplicationContext
         menu.Items.Add(_refreshItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(exitItem);
-        _notifyIcon = new NotifyIcon { Icon = _icon, Text = "DAREU AE6 V2: reading…", Visible = true, ContextMenuStrip = menu };
+
+        _notifyIcon = new NotifyIcon
+        {
+            Icon = _icon,
+            Text = "DAREU AE6 V2: reading…",
+            Visible = true,
+            ContextMenuStrip = menu
+        };
         _notifyIcon.DoubleClick += (_, _) => _ = RefreshAsync();
-        _coordinator = new PollCoordinator(new NativeHidTransport(), PublishStateAsync);
+
+        _coordinator = new PollCoordinator(
+            new NativeHidTransport(),
+            state => PublishStateAsync(state));
         _coordinator.Start();
     }
 
     private async Task RefreshAsync()
     {
         _refreshItem.Enabled = false;
-        try { await _coordinator.RefreshAsync(_shutdown.Token).ConfigureAwait(true); }
-        catch (OperationCanceledException) when (_shutdown.IsCancellationRequested) { }
-        finally { _refreshItem.Enabled = !_disposed; }
+        try
+        {
+            await _coordinator.RefreshAsync(_shutdown.Token).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) when (_shutdown.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            _refreshItem.Enabled = !_disposed;
+        }
     }
 
     private ValueTask PublishStateAsync(BatteryState state)
     {
-        if (_disposed) return ValueTask.CompletedTask;
+        if (_disposed)
+        {
+            return ValueTask.CompletedTask;
+        }
+
         _uiContext.Post(_ => ApplyState(state), null);
         return ValueTask.CompletedTask;
     }
 
     private void ApplyState(BatteryState state)
     {
-        if (_disposed) return;
-        var text = state.Availability == BatteryAvailability.Current && state.Reading is { } reading ? $"DAREU AE6 V2: {reading.Level}%" : state.Availability == BatteryAvailability.InvalidReport ? "DAREU AE6 V2: invalid report" : "DAREU AE6 V2: unavailable";
-        if (_notifyIcon.Text != text) _notifyIcon.Text = text;
-        if (state.Availability == BatteryAvailability.Current && state.Reading is { } current && _shownLevel != current.Level)
+        if (_disposed)
+        {
+            return;
+        }
+
+        var text = state.Availability == BatteryAvailability.Current && state.Reading is { } reading
+            ? $"DAREU AE6 V2: {reading.Level}%"
+            : state.Availability == BatteryAvailability.InvalidReport
+                ? "DAREU AE6 V2: invalid report"
+                : state.Detail is { Length: > 0 } detail
+                    ? $"DAREU AE6 V2: unavailable ({detail})"
+                    : "DAREU AE6 V2: unavailable";
+
+        if (_notifyIcon.Text != text)
+        {
+            _notifyIcon.Text = text;
+        }
+
+        if (state.Availability == BatteryAvailability.Current && state.Reading is { } current &&
+            _shownLevel != current.Level)
         {
             var nextIcon = CreateBatteryIcon(current.Level);
             var oldIcon = _icon;
@@ -72,9 +110,17 @@ internal sealed class TrayApplicationContext : ApplicationContext
             graphics.Clear(Color.Transparent);
             graphics.DrawString(level.ToString(), font, brush, new PointF(1, 10));
         }
+
         var iconHandle = bitmap.GetHicon();
-        try { using var icon = Icon.FromHandle(iconHandle); return (Icon)icon.Clone(); }
-        finally { DeleteObject(iconHandle); }
+        try
+        {
+            using var icon = Icon.FromHandle(iconHandle);
+            return (Icon)icon.Clone();
+        }
+        finally
+        {
+            DeleteObject(iconHandle);
+        }
     }
 
     [DllImport("gdi32.dll")]
@@ -83,7 +129,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private void Exit()
     {
-        if (_disposed) return;
+        if (_disposed)
+        {
+            return;
+        }
+
         _disposed = true;
         _shutdown.Cancel();
         _notifyIcon.Visible = false;
@@ -101,7 +151,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing && !_disposed) Exit();
+        if (disposing && !_disposed)
+        {
+            Exit();
+        }
         base.Dispose(disposing);
     }
 }
