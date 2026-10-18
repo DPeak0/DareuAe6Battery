@@ -166,8 +166,7 @@ public sealed class NativeHidTransport : IBatteryTransport
     }
 
     private static bool IsDareuCollection(string path) =>
-        path.Contains($"vid_{ProtocolLayout.VendorId:X4}", StringComparison.OrdinalIgnoreCase) &&
-        path.Contains($"pid_{ProtocolLayout.ProductId:X4}", StringComparison.OrdinalIgnoreCase);
+        path.Contains($"vid_{ProtocolLayout.VendorId:X4}", StringComparison.OrdinalIgnoreCase);
 
     private static bool TryGetCapabilities(
         SafeFileHandle device,
